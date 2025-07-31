@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>CPR Pose Detection</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+    }
+
+    #video,
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 640px;
+      height: 480px;
+    }
+
+    #video {
+      z-index: 0;
+    }
+
+    #canvas {
+      z-index: 1;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    // 綠框範圍定義（畫面中間 60% 區域）
+    const boxMarginRatio = 0.2; // 邊界各佔 20%
+    const boxX = canvas.width * boxMarginRatio;
+    const boxY = canvas.height * boxMarginRatio;
+    const boxWidth = canvas.width * (1 - 2 * boxMarginRatio);
+    const boxHeight = canvas.height * (1 - 2 * boxMarginRatio);
+
+    // 工具函數
+    function midpoint(p1, p2) {
+      return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    }
+
+    function calcAngle(a, b, c) {
+      const ab = [b.x - a.x, b.y - a.y];
+      const cb = [b.x - c.x, b.y - c.y];
+      const dot = ab[0] * cb[0] + ab[1] * cb[1];
+      const magAB = Math.hypot(ab[0], ab[1]);
+      const magCB = Math.hypot(cb[0], cb[1]);
+      return Math.acos(dot / (magAB * magCB)) * (180 / Math.PI);
+    }
+
+    function isArmVertical(shoulder, wrist) {
+      const dx = shoulder.x - wrist.x;
+      const dy = shoulder.y - wrist.y;
+      const angle = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+      return angle > 70 && angle < 110;
+    }
+
+    function areElbowsTogether(le, re, threshold = 0.2) {
+      const dx = le.x - re.x;
+      const dy = le.y - re.y;
+      const dist = Math.hypot(dx, dy);
+      return dist < threshold;
+    }
+
+    function onResults(results) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 畫綠框提示區
+      ctx.strokeStyle = "green";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+
+      if (!results.poseLandmarks) return;
+
+      const lm = results.poseLandmarks;
+      const ls = lm[11], rs = lm[12];
+      const le = lm[13], re = lm[14];
+      const lw = lm[15], rw = lm[16];
+
+      // 畫手臂線條
+      ctx.strokeStyle = "lime";
+      ctx.lineWidth = 4;
+
+      ctx.beginPath();
+      ctx.moveTo(ls.x * canvas.width, ls.y * canvas.height);
+      ctx.lineTo(le.x * canvas.width, le.y * canvas.height);
+      ctx.lineTo(lw.x * canvas.width, lw.y * canvas.height);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(rs.x * canvas.width, rs.y * canvas.height);
+      ctx.lineTo(re.x * canvas.width, re.y * canvas.height);
+      ctx.lineTo(rw.x * canvas.width, rw.y * canvas.height);
+      ctx.stroke();
+
+      const leftAngle = calcAngle(ls, le, lw);
+      const rightAngle = calcAngle(rs, re, rw);
+
+      // 顯示角度資訊
+      ctx.fillStyle = "white";
+      ctx.font = "24px Arial";
+      ctx.fillText("左肘角度: " + leftAngle.toFixed(1), 20, 70);
+      ctx.fillText("右肘角度: " + rightAngle.toFixed(1), 20, 100);
+
+      // 錯誤提示
+      ctx.fillStyle = "yellow";
+      if (leftAngle < 160 || rightAngle < 160) {
+        ctx.fillText("⚠️ 手肘未打直", 20, 40);
+      }
+
+      if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw)) {
+        ctx.fillText("⚠️ 手腕未在肩膀正下方", 20, 130);
+      }
+
+      if (!areElbowsTogether(le, re)) {
+        ctx.fillText("⚠️ 雙手未交疊", 20, 190);
+      }
+    }
+
+    // 初始化 Pose
+    const pose = new Pose({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 2,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.7,
+    });
+
+    pose.onResults(onResults);
+
+    // 啟動攝影機
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await pose.send({ image: video });
+      },
+      width: 640,
+      height: 480,
+    });
+    camera.start();
+  </script>
+</body>
+
+</html>
