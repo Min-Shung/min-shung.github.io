@@ -5,19 +5,27 @@
   <meta charset="UTF-8">
   <title>CPR Pose Detection</title>
   <style>
+    html,
     body {
       margin: 0;
-      overflow: hidden;
+      padding: 0;
+      width: 100%;
+      height: 100%;
       background: black;
+      overflow: hidden;
     }
 
     #video,
     #canvas {
       position: absolute;
-      top: 0;
-      left: 0;
+      top: 50%;
+      left: 50%;
       width: 100%;
       height: 100%;
+      max-width: 100vw;
+      max-height: 100vh;
+      transform: translate(-50%, -50%);
+      object-fit: contain;
     }
 
     #video {
@@ -33,7 +41,7 @@
 
 <body>
   <video id="video" autoplay playsinline></video>
-  <canvas id="canvas" width="640" height="480"></canvas>
+  <canvas id="canvas"></canvas>
 
   <!-- MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
@@ -45,14 +53,27 @@
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
 
-    // 綠框範圍定義（畫面中間 60% 區域）
-    const boxMarginRatio = 0.2; // 邊界各佔 20%
-    const boxX = canvas.width * boxMarginRatio;
-    const boxY = canvas.height * boxMarginRatio;
-    const boxWidth = canvas.width * (1 - 2 * boxMarginRatio);
-    const boxHeight = canvas.height * (1 - 2 * boxMarginRatio);
+    function resizeCanvas() {
+      if (video.videoWidth && video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+    }
 
-    // 工具函數
+    video.addEventListener('loadedmetadata', resizeCanvas);
+    window.addEventListener('resize', resizeCanvas);
+
+    const boxMarginRatio = 0.2;
+    function getBoxDimensions() {
+      const width = canvas.width;
+      const height = canvas.height;
+      const boxX = width * boxMarginRatio;
+      const boxY = height * boxMarginRatio;
+      const boxWidth = width * (1 - 2 * boxMarginRatio);
+      const boxHeight = height * (1 - 2 * boxMarginRatio);
+      return { boxX, boxY, boxWidth, boxHeight };
+    }
+
     function midpoint(p1, p2) {
       return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
     }
@@ -76,28 +97,35 @@
     function areElbowsTogether(le, re, threshold = 0.2) {
       const dx = le.x - re.x;
       const dy = le.y - re.y;
-      const dist = Math.hypot(dx, dy);
-      return dist < threshold;
+      return Math.hypot(dx, dy) < threshold;
     }
 
     function onResults(results) {
+      resizeCanvas();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 畫綠框提示區
+      const { boxX, boxY, boxWidth, boxHeight } = getBoxDimensions();
       ctx.strokeStyle = "green";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 6;
       ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
 
       if (!results.poseLandmarks) return;
+
+      let textLine = 60;
+      const drawLine = (text, color = "white") => {
+        ctx.fillStyle = color;
+        ctx.font = `${canvas.height * 0.04}px Arial`;
+        ctx.fillText(text, 20, textLine);
+        textLine += canvas.height * 0.05;
+      };
 
       const lm = results.poseLandmarks;
       const ls = lm[11], rs = lm[12];
       const le = lm[13], re = lm[14];
       const lw = lm[15], rw = lm[16];
 
-      // 畫手臂線條
       ctx.strokeStyle = "lime";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 6;
 
       ctx.beginPath();
       ctx.moveTo(ls.x * canvas.width, ls.y * canvas.height);
@@ -114,28 +142,120 @@
       const leftAngle = calcAngle(ls, le, lw);
       const rightAngle = calcAngle(rs, re, rw);
 
-      // 顯示角度資訊
-      ctx.fillStyle = "white";
-      ctx.font = "24px Arial";
-      ctx.fillText("左肘角度: " + leftAngle.toFixed(1), 20, 70);
-      ctx.fillText("右肘角度: " + rightAngle.toFixed(1), 20, 100);
+      drawLine("左肘角度: " + leftAngle.toFixed(1));
+      drawLine("右肘角度: " + rightAngle.toFixed(1));
 
-      // 錯誤提示
-      ctx.fillStyle = "yellow";
-      if (leftAngle < 160 || rightAngle < 160) {
-        ctx.fillText("⚠️ 手肘未打直", 20, 40);
+      if (leftAngle < 160 || rightAngle < 160) drawLine("⚠️ 手肘未打直", "yellow");
+      if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw)) drawLine("⚠️ 手腕未在肩膀正下方", "yellow");
+      if (!areElbowsTogether(le, re)) drawLine("⚠️ 雙手未交疊", "yellow");
+
+      if (!window.pressPath) window.pressPath = [];
+      const pressPoint = midpoint(lw, rw);
+      const px = pressPoint.x * canvas.width;
+      const py = pressPoint.y * canvas.height;
+      window.pressPath.push({ x: px, y: py });
+      if (window.pressPath.length > 60) window.pressPath.shift();
+
+      function smoothPath(path, k = 5) {
+        const smoothed = [];
+        for (let i = 0; i < path.length; i++) {
+          let xSum = 0, ySum = 0, count = 0;
+          for (let j = i - Math.floor(k / 2); j <= i + Math.floor(k / 2); j++) {
+            if (path[j]) {
+              xSum += path[j].x;
+              ySum += path[j].y;
+              count++;
+            }
+          }
+          smoothed.push({ x: xSum / count, y: ySum / count });
+        }
+        return smoothed;
       }
 
-      if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw)) {
-        ctx.fillText("⚠️ 手腕未在肩膀正下方", 20, 130);
+      const smoothedPath = smoothPath(window.pressPath);
+
+      ctx.strokeStyle = "aqua";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      smoothedPath.forEach((pt, i) => {
+        if (i === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      });
+      ctx.stroke();
+
+      const yValues = smoothedPath.map(p => p.y);
+
+      function findExtrema(yVals) {
+        const peaks = [];
+        for (let i = 1; i < yVals.length - 1; i++) {
+          if (yVals[i] > yVals[i - 1] && yVals[i] > yVals[i + 1]) {
+            peaks.push({ type: 'max', y: yVals[i], index: i });
+          }
+          if (yVals[i] < yVals[i - 1] && yVals[i] < yVals[i + 1]) {
+            peaks.push({ type: 'min', y: yVals[i], index: i });
+          }
+        }
+        return peaks;
       }
 
-      if (!areElbowsTogether(le, re)) {
-        ctx.fillText("⚠️ 雙手未交疊", 20, 190);
+      const extrema = findExtrema(yValues);
+
+      const depths = [];
+      for (let i = 1; i < extrema.length - 1; i++) {
+        const prev = extrema[i - 1], curr = extrema[i], next = extrema[i + 1];
+        if (prev.type === 'max' && curr.type === 'min' && next.type === 'max') {
+          const depth = Math.max(prev.y - curr.y, next.y - curr.y);
+          depths.push(depth);
+        }
       }
+
+      if (depths.length > 0) {
+        const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
+        const stdDepth = Math.sqrt(depths.reduce((sum, d) => sum + Math.pow(d - avgDepth, 2), 0) / depths.length);
+        if (stdDepth > 15) {
+          drawLine("⚠️ 壓胸深度不穩定", "yellow");
+        }
+      } else {
+        drawLine("⚠️ 無法判斷壓胸深度（動作過少）", "yellow");
+      }
+
+      // 壓胸頻率判斷 
+      // 初始化壓胸時間列表
+      if (!window.pressTimestamps) window.pressTimestamps = [];
+
+      const now = Date.now();
+      extrema.forEach(e => {
+        if (e.type === 'min') {
+          const timestamp = now - (extrema.length - e.index) * (1000 / 30); // 約略時間對應
+          if (window.pressTimestamps.length === 0 || timestamp - window.pressTimestamps[window.pressTimestamps.length - 1] > 300) {
+            window.pressTimestamps.push(timestamp);
+          }
+        }
+      });
+
+      // 保留近 20 筆資料
+      if (window.pressTimestamps.length > 20) {
+        window.pressTimestamps = window.pressTimestamps.slice(-20);
+      }
+
+      // 計算平均節奏
+      if (window.pressTimestamps.length >= 5) {
+        const intervals = [];
+        for (let i = 1; i < window.pressTimestamps.length; i++) {
+          intervals.push(window.pressTimestamps[i] - window.pressTimestamps[i - 1]);
+        }
+        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const frequency = 60000 / avgInterval;
+
+        drawLine(`壓胸頻率: ${frequency.toFixed(1)} 下/分`, frequency >= 110 && frequency <= 120 ? "lime" : "yellow");
+
+        if (frequency < 110 || frequency > 120) {
+          drawLine("⚠️ 壓胸頻率不正確 (建議 110~120)", "yellow");
+        }
+      }
+
     }
 
-    // 初始化 Pose
     const pose = new Pose({
       locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
     });
@@ -150,7 +270,6 @@
 
     pose.onResults(onResults);
 
-    // 啟動攝影機
     const camera = new Camera(video, {
       onFrame: async () => {
         await pose.send({ image: video });
@@ -158,6 +277,7 @@
       width: 640,
       height: 480,
     });
+
     camera.start();
   </script>
 </body>
