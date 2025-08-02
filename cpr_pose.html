@@ -204,9 +204,9 @@
         // 計算壓胸頻率
         if (!window[pressTimestampsName]) window[pressTimestampsName] = [];
         const now = Date.now();
-        /*if (!window["startTime"]) window["startTime"] = now;
+        if (!window["startTime"]) window["startTime"] = now;
         const elapsed = now - window["startTime"];
-        if (elapsed < 5000) return;*/
+        if (elapsed < 3000) return;
         extrema.forEach(e => {
           if (e.type === 'min') {
             const timestamp = now - (extrema.length - e.index) * (1000 / 30);
