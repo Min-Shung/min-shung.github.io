@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>CPR Dual Pose Detection</title>
@@ -13,9 +14,7 @@
       width: 100%;
       display: flex;
       flex-direction: row;
-      flex-wrap: nowrap;
     }
-
     .container {
       flex: 1;
       position: relative;
@@ -23,14 +22,12 @@
       justify-content: center;
       align-items: center;
     }
-
     video, canvas {
       position: absolute;
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
-
     @media (orientation: portrait) {
       body {
         flex-direction: column;
@@ -38,17 +35,15 @@
     }
   </style>
 </head>
-<body>
 
-  <!-- 鏡頭畫面 + 偵測 -->
+<body>
   <div class="container">
     <video id="userVideo" autoplay playsinline muted></video>
     <canvas id="userCanvas"></canvas>
   </div>
 
-  <!-- CPR 示範影片 + 偵測 -->
   <div class="container">
-    <video id="demoVideo" src="CPR_demonstration.mov" autoplay loop muted playsinline></video>
+    <video id="demoVideo" src="CPR_demonstration.mov" autoplay muted loop playsinline></video>
     <canvas id="demoCanvas"></canvas>
   </div>
 
@@ -75,40 +70,94 @@
 
     window.addEventListener('resize', resizeCanvases);
 
-    const drawPose = (ctx, landmarks) => {
-      if (!landmarks) return;
-      drawConnectors(ctx, landmarks, Pose.POSE_CONNECTIONS, { color: 'lime', lineWidth: 3 });
-      drawLandmarks(ctx, landmarks, { color: 'cyan', radius: 3 });
-    };
+    // 使用你原本的偵測設定（提示、框線...）
+    async function runFullAnalysis(ctx, video, canvas, results) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // 建立 pose 偵測器
-    function createPose(onResults) {
+      if (!results.poseLandmarks) return;
+
+      const lm = results.poseLandmarks;
+      const ls = lm[11], rs = lm[12];
+      const le = lm[13], re = lm[14];
+      const lw = lm[15], rw = lm[16];
+
+      const midpoint = (p1, p2) => ({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
+      const calcAngle = (a, b, c) => {
+        const ab = [b.x - a.x, b.y - a.y];
+        const cb = [b.x - c.x, b.y - c.y];
+        const dot = ab[0] * cb[0] + ab[1] * cb[1];
+        const magAB = Math.hypot(...ab);
+        const magCB = Math.hypot(...cb);
+        return Math.acos(dot / (magAB * magCB)) * (180 / Math.PI);
+      };
+      const isArmVertical = (shoulder, wrist) => {
+        const dx = shoulder.x - wrist.x;
+        const dy = shoulder.y - wrist.y;
+        const angle = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+        return angle > 70 && angle < 110;
+      };
+      const areElbowsTogether = (le, re, threshold = 0.2) => {
+        const dx = le.x - re.x;
+        const dy = le.y - re.y;
+        return Math.hypot(dx, dy) < threshold;
+      };
+
+      // 畫手臂線
+      ctx.strokeStyle = 'lime';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(ls.x * canvas.width, ls.y * canvas.height);
+      ctx.lineTo(le.x * canvas.width, le.y * canvas.height);
+      ctx.lineTo(lw.x * canvas.width, lw.y * canvas.height);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(rs.x * canvas.width, rs.y * canvas.height);
+      ctx.lineTo(re.x * canvas.width, re.y * canvas.height);
+      ctx.lineTo(rw.x * canvas.width, rw.y * canvas.height);
+      ctx.stroke();
+
+      // 提示與角度顯示
+      let textLine = 30;
+      const drawLine = (text, color = "white") => {
+        ctx.fillStyle = color;
+        ctx.font = `${canvas.height * 0.04}px Arial`;
+        ctx.fillText(text, 20, textLine);
+        textLine += canvas.height * 0.05;
+      };
+
+      const leftAngle = calcAngle(ls, le, lw);
+      const rightAngle = calcAngle(rs, re, rw);
+
+      drawLine("左肘角度: " + leftAngle.toFixed(1));
+      drawLine("右肘角度: " + rightAngle.toFixed(1));
+
+      if (leftAngle < 160 || rightAngle < 160) drawLine("⚠️ 手肘未打直", "yellow");
+      if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw)) drawLine("⚠️ 手腕未在肩膀正下方", "yellow");
+      if (!areElbowsTogether(le, re)) drawLine("⚠️ 雙手未交疊", "yellow");
+    }
+
+    function createPose(callback) {
       const pose = new Pose({
         locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
       });
       pose.setOptions({
-        modelComplexity: 1,
+        modelComplexity: 2,
         smoothLandmarks: true,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6
+        enableSegmentation: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.7,
       });
-      pose.onResults(onResults);
+      pose.onResults(callback);
       return pose;
     }
 
-    const userPose = createPose(results => {
-      userCtx.clearRect(0, 0, userCanvas.width, userCanvas.height);
-      userCtx.drawImage(userVideo, 0, 0, userCanvas.width, userCanvas.height);
-      drawPose(userCtx, results.poseLandmarks);
-    });
+    const userPose = createPose(results => runFullAnalysis(userCtx, userVideo, userCanvas, results));
+    const demoPose = createPose(results => runFullAnalysis(demoCtx, demoVideo, demoCanvas, results));
 
-    const demoPose = createPose(results => {
-      demoCtx.clearRect(0, 0, demoCanvas.width, demoCanvas.height);
-      demoCtx.drawImage(demoVideo, 0, 0, demoCanvas.width, demoCanvas.height);
-      drawPose(demoCtx, results.poseLandmarks);
-    });
-
-    // 啟動使用者鏡頭
     const camera = new Camera(userVideo, {
       onFrame: async () => {
         resizeCanvases();
@@ -119,7 +168,6 @@
     });
     camera.start();
 
-    // 啟動影片姿勢分析
     demoVideo.addEventListener('loadeddata', () => {
       function analyzeDemoFrame() {
         resizeCanvases();
