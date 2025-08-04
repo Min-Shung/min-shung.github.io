@@ -2,10 +2,11 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>CPR Pose Detection Dual View</title>
   <style>
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       width: 100%;
@@ -30,7 +31,8 @@
       overflow: hidden;
     }
 
-    video, canvas {
+    video,
+    canvas {
       position: absolute;
       width: 100%;
       height: 100%;
@@ -63,8 +65,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
 
   <script>
-    function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName ,pressStartTimeName) {
+    function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
       const ctx = canvasElement.getContext("2d");
+
+      // 記錄每幀的真實時間戳（ms）
+      if (!window.frameTimes) window.frameTimes = [];
 
       function resizeCanvas() {
         if (videoElement.videoWidth && videoElement.videoHeight) {
@@ -73,8 +78,8 @@
         }
       }
 
-      videoElement.addEventListener('loadedmetadata', resizeCanvas);
-      window.addEventListener('resize', resizeCanvas);
+      videoElement.addEventListener("loadedmetadata", resizeCanvas);
+      window.addEventListener("resize", resizeCanvas);
 
       function getBoxDimensions() {
         const boxMarginRatio = 0.2;
@@ -97,13 +102,13 @@
         const dot = ab[0] * cb[0] + ab[1] * cb[1];
         const magAB = Math.hypot(ab[0], ab[1]);
         const magCB = Math.hypot(cb[0], cb[1]);
-        return Math.acos(dot / (magAB * magCB)) * (180 / Math.PI);
+        return (Math.acos(dot / (magAB * magCB)) * 180) / Math.PI;
       }
 
       function isArmVertical(shoulder, wrist) {
         const dx = shoulder.x - wrist.x;
         const dy = shoulder.y - wrist.y;
-        const angle = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+        const angle = Math.abs((Math.atan2(dy, dx) * 180) / Math.PI);
         return angle > 70 && angle < 110;
       }
 
@@ -111,6 +116,35 @@
         const dx = le.x - re.x;
         const dy = le.y - re.y;
         return Math.hypot(dx, dy) < threshold;
+      }
+
+      function smoothPath(path, k = 5) {
+        const smoothed = [];
+        for (let i = 0; i < path.length; i++) {
+          let xSum = 0,
+            ySum = 0,
+            count = 0;
+          for (let j = i - Math.floor(k / 2); j <= i + Math.floor(k / 2); j++) {
+            if (path[j]) {
+              xSum += path[j].x;
+              ySum += path[j].y;
+              count++;
+            }
+          }
+          smoothed.push({ x: xSum / count, y: ySum / count });
+        }
+        return smoothed;
+      }
+
+      function findExtrema(yVals) {
+        const peaks = [];
+        for (let i = 1; i < yVals.length - 1; i++) {
+          if (yVals[i] > yVals[i - 1] && yVals[i] > yVals[i + 1])
+            peaks.push({ type: "max", y: yVals[i], index: i });
+          if (yVals[i] < yVals[i - 1] && yVals[i] < yVals[i + 1])
+            peaks.push({ type: "min", y: yVals[i], index: i });
+        }
+        return peaks;
       }
 
       function onResults(results) {
@@ -124,6 +158,11 @@
 
         if (!results.poseLandmarks) return;
 
+        // 記錄此幀真實時間戳，限制長度60筆
+        const now = performance.now();
+        window.frameTimes.push(now);
+        if (window.frameTimes.length > 60) window.frameTimes.shift();
+
         let textLine = 60;
         const drawLine = (text, color = "white") => {
           ctx.fillStyle = color;
@@ -133,9 +172,12 @@
         };
 
         const lm = results.poseLandmarks;
-        const ls = lm[11], rs = lm[12];
-        const le = lm[13], re = lm[14];
-        const lw = lm[15], rw = lm[16];
+        const ls = lm[11],
+          rs = lm[12];
+        const le = lm[13],
+          re = lm[14];
+        const lw = lm[15],
+          rw = lm[16];
 
         ctx.strokeStyle = "lime";
         ctx.lineWidth = 6;
@@ -158,7 +200,8 @@
         drawLine("右肘角度: " + rightAngle.toFixed(1));
 
         if (leftAngle < 160 || rightAngle < 160) drawLine("⚠️ 手肘未打直", "yellow");
-        if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw)) drawLine("⚠️ 手腕未在肩膀正下方", "yellow");
+        if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw))
+          drawLine("⚠️ 手腕未在肩膀正下方", "yellow");
         if (!areElbowsTogether(le, re)) drawLine("⚠️ 雙手未交疊", "yellow");
 
         if (!window[pressPathName]) window[pressPathName] = [];
@@ -179,13 +222,15 @@
         });
         ctx.stroke();*/
 
-        const yValues = smoothedPath.map(p => p.y);
+        const yValues = smoothedPath.map((p) => p.y);
         const extrema = findExtrema(yValues);
 
         const depths = [];
         for (let i = 1; i < extrema.length - 1; i++) {
-          const prev = extrema[i - 1], curr = extrema[i], next = extrema[i + 1];
-          if (prev.type === 'max' && curr.type === 'min' && next.type === 'max') {
+          const prev = extrema[i - 1],
+            curr = extrema[i],
+            next = extrema[i + 1];
+          if (prev.type === "max" && curr.type === "min" && next.type === "max") {
             const depth = Math.max(prev.y - curr.y, next.y - curr.y);
             depths.push(depth);
           }
@@ -193,7 +238,9 @@
 
         if (depths.length > 0) {
           const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
-          const stdDepth = Math.sqrt(depths.reduce((sum, d) => sum + Math.pow(d - avgDepth, 2), 0) / depths.length);
+          const stdDepth = Math.sqrt(
+            depths.reduce((sum, d) => sum + Math.pow(d - avgDepth, 2), 0) / depths.length
+          );
           if (stdDepth > 15) {
             drawLine("⚠️ 壓胸深度不穩定", "yellow");
           }
@@ -201,28 +248,28 @@
           drawLine("⚠️ 無法判斷壓胸深度（動作過少）", "yellow");
         }
 
-        // 計算壓胸頻率
-        // *** 依雙手交疊判斷壓胸頻率 ***
+        // 計算壓胸頻率 - 用實際時間戳記計算
         const elbowsTogether = areElbowsTogether(le, re);
         if (elbowsTogether) {
           if (!window[pressTimestampsName]) window[pressTimestampsName] = [];
-          const now = Date.now();
-          if (!window[pressStartTimeName]) {
-            window[pressStartTimeName] = now;
-          }
+          if (!window[pressStartTimeName]) window[pressStartTimeName] = now;
 
           for (let i = 1; i < extrema.length - 1; i++) {
             const prev = extrema[i - 1];
             const curr = extrema[i];
             const next = extrema[i + 1];
 
-            if (prev.type === 'max' && curr.type === 'min' && next.type === 'max') {
-              const avgIndex = (prev.index + next.index) / 2;
-              const timestamp = now - (extrema.length - avgIndex) * (1000 / 30);
+            if (prev.type === "max" && curr.type === "min" && next.type === "max") {
+              // 用 extrema index 對應 frameTimes 取真實時間戳
+              const timePrev = window.frameTimes[prev.index];
+              const timeNext = window.frameTimes[next.index];
+              if (!timePrev || !timeNext) continue;
+
+              const avgTime = (timePrev + timeNext) / 2;
 
               const last = window[pressTimestampsName][window[pressTimestampsName].length - 1] || 0;
-              if (timestamp - last > 400) { // 至少間隔 400ms 避免誤觸（<150/min）
-                window[pressTimestampsName].push(timestamp);
+              if (avgTime - last > 400) {
+                window[pressTimestampsName].push(avgTime);
               }
             }
           }
@@ -241,44 +288,21 @@
             const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
             const frequency = 60000 / avgInterval;
 
-            drawLine(`壓胸頻率: ${frequency.toFixed(1)} 下/分`, frequency >= 100 && frequency <= 120 ? "lime" : "yellow");
+            drawLine(
+              `壓胸頻率: ${frequency.toFixed(1)} 下/分`,
+              frequency >= 100 && frequency <= 120 ? "lime" : "yellow"
+            );
 
             if (frequency < 100 || frequency > 120) {
               drawLine("⚠️ 壓胸頻率不正確 (建議 100~120)", "yellow");
             }
-}
+          }
         } else {
           // 雙手未交疊，清空頻率資料
           window[pressTimestampsName] = [];
           window[pressStartTimeName] = null;
           drawLine("⚠️ 雙手未交疊，壓胸頻率清空", "yellow");
         }
-
-      }
-
-      function smoothPath(path, k = 5) {
-        const smoothed = [];
-        for (let i = 0; i < path.length; i++) {
-          let xSum = 0, ySum = 0, count = 0;
-          for (let j = i - Math.floor(k / 2); j <= i + Math.floor(k / 2); j++) {
-            if (path[j]) {
-              xSum += path[j].x;
-              ySum += path[j].y;
-              count++;
-            }
-          }
-          smoothed.push({ x: xSum / count, y: ySum / count });
-        }
-        return smoothed;
-      }
-
-      function findExtrema(yVals) {
-        const peaks = [];
-        for (let i = 1; i < yVals.length - 1; i++) {
-          if (yVals[i] > yVals[i - 1] && yVals[i] > yVals[i + 1]) peaks.push({ type: 'max', y: yVals[i], index: i });
-          if (yVals[i] < yVals[i - 1] && yVals[i] < yVals[i + 1]) peaks.push({ type: 'min', y: yVals[i], index: i });
-        }
-        return peaks;
       }
 
       poseInstance.onResults(onResults);
@@ -287,20 +311,40 @@
     // 鏡頭
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
-    const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    pose.setOptions({ modelComplexity: 2, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.7 });
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+    });
+    pose.setOptions({
+      modelComplexity: 2,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.7,
+    });
     setupPose(video, canvas, pose, "pressPath", "pressTimestamps", "pressStartTime");
-    const camera = new Camera(video, { onFrame: async () => await pose.send({ image: video }), width: 640, height: 480 });
+    const camera = new Camera(video, {
+      onFrame: async () => await pose.send({ image: video }),
+      width: 640,
+      height: 480,
+    });
     camera.start();
 
     // 示範影片
     const demoVideo = document.getElementById("demoVideo");
     const demoCanvas = document.getElementById("demoCanvas");
-    const pose2 = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    pose2.setOptions({ modelComplexity: 2, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.7 });
+    const pose2 = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+    });
+    pose2.setOptions({
+      modelComplexity: 2,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.7,
+    });
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
     demoVideo.playbackRate = 0.812;
-    demoVideo.addEventListener('play', () => {
+    demoVideo.addEventListener("play", () => {
       demoVideo.playbackRate = 0.82;
     });
     demoVideo.onplay = function loopDetection() {
@@ -309,7 +353,6 @@
         loopDetection();
       });
     };
-
   </script>
 </body>
 
