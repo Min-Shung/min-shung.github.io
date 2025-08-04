@@ -202,38 +202,49 @@
         }
 
         // 計算壓胸頻率
-        if (!window[pressTimestampsName]) window[pressTimestampsName] = [];
-        const now = Date.now();
-        if (!window["startTime"]) window["startTime"] = now;
-        const elapsed = now - window["startTime"];
-        if (elapsed < 3000) return;
-        extrema.forEach(e => {
-          if (e.type === 'min') {
-            const timestamp = now - (extrema.length - e.index) * (1000 / 30);
-            if (window[pressTimestampsName].length === 0 || timestamp - window[pressTimestampsName][window[pressTimestampsName].length - 1] > 300) {
-              window[pressTimestampsName].push(timestamp);
+        // *** 依雙手交疊判斷壓胸頻率 ***
+        const elbowsTogether = areElbowsTogether(le, re);
+        if (elbowsTogether) {
+          if (!window[pressTimestampsName]) window[pressTimestampsName] = [];
+
+          const now = Date.now();
+          extrema.forEach(e => {
+            if (e.type === 'min') {
+              // 約略時間估算
+              const timestamp = now - (extrema.length - e.index) * (1000 / 30);
+              if (
+                window[pressTimestampsName].length === 0 ||
+                timestamp - window[pressTimestampsName][window[pressTimestampsName].length - 1] > 300
+              ) {
+                window[pressTimestampsName].push(timestamp);
+              }
+            }
+          });
+
+          if (window[pressTimestampsName].length > 20) {
+            window[pressTimestampsName] = window[pressTimestampsName].slice(-20);
+          }
+
+          if (window[pressTimestampsName].length >= 5) {
+            const intervals = [];
+            for (let i = 1; i < window[pressTimestampsName].length; i++) {
+              intervals.push(window[pressTimestampsName][i] - window[pressTimestampsName][i - 1]);
+            }
+            const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+            const frequency = 60000 / avgInterval;
+
+            drawLine(`壓胸頻率: ${frequency.toFixed(1)} 下/分`, frequency >= 100 && frequency <= 120 ? "lime" : "yellow");
+
+            if (frequency < 100 || frequency > 120) {
+              drawLine("⚠️ 壓胸頻率不正確 (建議 100~120)", "yellow");
             }
           }
-        });
-
-        if (window[pressTimestampsName].length > 20) {
-          window[pressTimestampsName] = window[pressTimestampsName].slice(-20);
+        } else {
+          // 雙手未交疊，清空頻率資料
+          window[pressTimestampsName] = [];
+          drawLine("⚠️ 雙手未交疊，壓胸頻率清空", "yellow");
         }
 
-        if (window[pressTimestampsName].length >= 5) {
-          const intervals = [];
-          for (let i = 1; i < window[pressTimestampsName].length; i++) {
-            intervals.push(window[pressTimestampsName][i] - window[pressTimestampsName][i - 1]);
-          }
-          const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-          const frequency = 60000 / avgInterval;
-
-          drawLine(`壓胸頻率: ${frequency.toFixed(1)} 下/分`, frequency >= 100 && frequency <= 120 ? "lime" : "yellow");
-
-          if (frequency < 100 || frequency > 125) {
-            drawLine("⚠️ 壓胸頻率不正確 (建議 110~120)", "yellow");
-          }
-        }
       }
 
       function smoothPath(path, k = 5) {
@@ -279,9 +290,9 @@
     const pose2 = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
     pose2.setOptions({ modelComplexity: 2, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.7 });
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2");
-    demoVideo.playbackRate = 0.812;
+    demoVideo.playbackRate = 0.815;
     demoVideo.addEventListener('play', () => {
-      demoVideo.playbackRate = 0.812;
+      demoVideo.playbackRate = 0.815;
     });
     demoVideo.onplay = function loopDetection() {
       requestAnimationFrame(async () => {
