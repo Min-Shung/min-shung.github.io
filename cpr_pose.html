@@ -200,8 +200,28 @@
         drawLine("右肘角度: " + rightAngle.toFixed(1));
 
         if (leftAngle < 160 || rightAngle < 160) drawLine("⚠️ 手肘未打直", "yellow");
-        if (!isArmVertical(ls, lw) || !isArmVertical(rs, rw))
-          drawLine("⚠️ 手腕未在肩膀正下方", "yellow");
+        // === 新增/初始化持續偵測變數 ===
+        if (!window.wristNotUnderShoulderStart) window.wristNotUnderShoulderStart = null;
+
+        const wristNotUnderShoulder =
+          !isArmVertical(ls, lw) || !isArmVertical(rs, rw);
+
+        if (wristNotUnderShoulder) {
+          // 第一次進入錯誤狀態時記錄時間
+          if (!window.wristNotUnderShoulderStart) {
+            window.wristNotUnderShoulderStart = now;
+          }
+
+          // 計算持續時間
+          const duration = now - window.wristNotUnderShoulderStart;
+          if (duration >= 5000) {
+            drawLine("⚠️ 手腕未在肩膀正下方（超過5秒）", "yellow");
+          }
+        } else {
+          // 狀態恢復正常，重置計時器
+          window.wristNotUnderShoulderStart = null;
+        }
+
         if (!areElbowsTogether(le, re)) drawLine("⚠️ 雙手未交疊", "yellow");
 
         if (!window[pressPathName]) window[pressPathName] = [];
