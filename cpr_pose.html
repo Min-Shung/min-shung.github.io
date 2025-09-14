@@ -48,6 +48,22 @@
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .voice-btn {
+      position: absolute;
+      bottom: 65px; 
+      left: 15px;
+      background: rgba(0, 0, 0, 0.5);
+      border: none;
+      border-radius: 50%;
+      padding: 10px;
+      cursor: pointer;
+      color: white;
+      font-size: 24px;
+    }
+    .voice-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
     video,
     canvas {
       position: absolute;
@@ -69,6 +85,9 @@
     <div class="panel">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="canvas"></canvas>
+      <button id="toggleVoice" class="voice-btn">
+        <i id="voiceIcon" class="fi fi-rr-megaphone-slash"></i>
+      </button>
       <button id="switchCamera" class="switch-camera-btn">
         <i class="fi fi-rr-refresh"></i>
       </button>
