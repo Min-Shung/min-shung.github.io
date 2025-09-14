@@ -393,6 +393,9 @@
     };
 
     // 切換聲音開關
+    const toggleVoiceBtn = document.getElementById("toggleVoice");
+    const voiceIcon = document.getElementById("voiceIcon");
+
     toggleVoiceBtn.addEventListener("click", () => {
       voiceEnabled = !voiceEnabled;
       if (voiceEnabled) {
