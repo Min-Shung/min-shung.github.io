@@ -100,7 +100,7 @@
             audio: false,
           });
           currentStream = stream;
-          video.srcObject = stream;
+          videoElement.srcObject = stream;
         } catch (err) {
           console.error("無法開啟相機:", err);
         }
