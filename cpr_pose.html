@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css">
   <title>CPR Pose Detection Dual View</title>
   <style>
     html,
@@ -39,6 +40,23 @@
       object-fit: contain;
     }
 
+    #switchCam {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 40px;   /* 圖示大小 */
+      color: white;      /* 顏色 */
+      cursor: pointer;
+      opacity: 0.8;
+      z-index: 10;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    #switchCam:hover {
+      opacity: 1;
+      transform: rotate(90deg); /* hover 時轉一下更有相機切換感 */
+    }
+
     @media (orientation: landscape) {
       .container {
         flex-direction: row;
@@ -52,6 +70,7 @@
     <div class="panel">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="canvas"></canvas>
+      <i id="switchCam" class="fi fi-rr-refresh"></i>
     </div>
     <div class="panel">
       <video id="demoVideo" autoplay loop muted playsinline src="CPR_demonstration.mov"></video>
@@ -67,6 +86,35 @@
   <script>
     function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
       const ctx = canvasElement.getContext("2d");
+
+      //鏡頭切換
+      const video = document.getElementById("video");
+      const switchBtn = document.getElementById("switchCam");
+      let currentStream;
+      let useFront = true; // 預設前鏡頭
+
+      async function startCamera() {
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => track.stop());
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: useFront ? "user" : "environment" },
+            audio: false,
+          });
+          currentStream = stream;
+          video.srcObject = stream;
+        } catch (err) {
+          console.error("無法開啟相機:", err);
+        }
+      }
+
+      switchBtn.addEventListener("click", () => {
+        useFront = !useFront;
+        startCamera();
+      });
+
+      startCamera();
 
       // 記錄每幀的真實時間戳（ms）
       if (!window.frameTimes) window.frameTimes = [];
@@ -342,11 +390,6 @@
       minTrackingConfidence: 0.7,
     });
     setupPose(video, canvas, pose, "pressPath", "pressTimestamps", "pressStartTime");
-    const camera = new Camera(video, {
-      onFrame: async () => await pose.send({ image: video }),
-      width: 640,
-      height: 480,
-    });
     camera.start();
 
     // 示範影片
