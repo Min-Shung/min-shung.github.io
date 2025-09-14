@@ -239,7 +239,10 @@
         drawLine("左肘角度: " + leftAngle.toFixed(1));
         drawLine("右肘角度: " + rightAngle.toFixed(1));
 
-        if (leftAngle < 160 || rightAngle < 160) drawLine("⚠️ 手肘未打直", "yellow");
+        if (leftAngle < 160 || rightAngle < 160) {
+          drawLine("⚠️ 手肘未打直", "yellow");
+          playVoiceAlert("elbow");
+        }
         // === 新增/初始化持續偵測變數 ===
         if (!window.wristNotUnderShoulderStart) window.wristNotUnderShoulderStart = null;
 
@@ -355,6 +358,7 @@
 
             if (frequency < 100 || frequency > 120) {
               drawLine("⚠️ 壓胸頻率不正確 (建議 100~120)", "yellow");
+              playVoiceAlert("hands");
             }
           }
         } else {
@@ -366,6 +370,42 @@
       }
 
       poseInstance.onResults(onResults);
+    }
+
+    // === 聲音提示控制 ===
+    let voiceEnabled = false;
+    let lastVoiceTime = 0;
+    const VOICE_COOLDOWN = 2600; // 2秒音效 + 0.6秒間隔
+
+    const sounds = {
+      elbow: new Audio("radio/elbow.mp3"),
+      hands: new Audio("radio/hands.mp3"),
+      wrist: new Audio("radio/wrist.mp3")
+    };
+
+    // 切換聲音開關
+    document.getElementById("toggleVoice").addEventListener("click", () => {
+      voiceEnabled = !voiceEnabled;
+      const icon = document.getElementById("voiceIcon");
+      if (voiceEnabled) {
+        icon.className = "fi fi-rr-megaphone"; // 開啟提示
+      } else {
+        icon.className = "fi fi-rr-megaphone-slash"; // 關閉提示
+      }
+    });
+
+    // 播放提示音（僅鏡頭用）
+    function playVoiceAlert(type) {
+      if (!voiceEnabled) return;
+
+      const now = Date.now();
+      if (now - lastVoiceTime < VOICE_COOLDOWN) return; // 冷卻中
+
+      if (sounds[type]) {
+        sounds[type].currentTime = 0;
+        sounds[type].play();
+        lastVoiceTime = now;
+      }
     }
 
     // 鏡頭
