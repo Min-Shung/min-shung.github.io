@@ -41,13 +41,13 @@
     }
 
     #switchCam {
-     position: absolute;
-      bottom: 10px;  
+      position: absolute;
+      bottom: 10px;   
       right: 10px;
       font-size: 20px;
       cursor: pointer;
       opacity: 0.8;
-      z-index: 20; /* 高於 canvas */
+      z-index: 20;
       transition: transform 0.2s, opacity 0.2s;
     }
 
@@ -373,6 +373,11 @@
       }
 
       poseInstance.onResults(onResults);
+      async function onFrame() {
+        await poseInstance.send({ image: videoElement });
+        requestAnimationFrame(onFrame);
+      }
+      onFrame();
     }
 
     // 鏡頭
@@ -389,7 +394,6 @@
       minTrackingConfidence: 0.7,
     });
     setupPose(video, canvas, pose, "pressPath", "pressTimestamps", "pressStartTime");
-    camera.start();
 
     // 示範影片
     const demoVideo = document.getElementById("demoVideo");
