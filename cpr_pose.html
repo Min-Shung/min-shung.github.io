@@ -60,17 +60,12 @@
       color: white;
       font-size: 24px;
     }
+    .voice-btn i.muted {
+      color: gray; /* 靜音變灰色 */
+    }
+
     .voice-btn:hover {
-      position: absolute;
-      bottom: 65px; 
-      left: 15px;
-      background: rgba(0, 0, 0, 0.5);
-      border: none;
-      border-radius: 50%;
-      padding: 10px;
-      cursor: pointer;
-      color: rgba(255, 255, 255, 0.2);
-      font-size: 24px;
+      background: rgba(255, 255, 255, 0.2);
     }
 
     video,
@@ -398,13 +393,12 @@
     };
 
     // 切換聲音開關
-    document.getElementById("toggleVoice").addEventListener("click", () => {
+    toggleVoiceBtn.addEventListener("click", () => {
       voiceEnabled = !voiceEnabled;
-      const icon = document.getElementById("voiceIcon");
       if (voiceEnabled) {
-        icon.className = "fi fi-rr-megaphone"; // 開啟提示
+        voiceIcon.classList.remove("muted");
       } else {
-        icon.className = "fi fi-rr-megaphone-slash"; // 關閉提示
+        voiceIcon.classList.add("muted");
       }
     });
 
