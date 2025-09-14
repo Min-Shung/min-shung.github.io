@@ -85,10 +85,8 @@
   <script>
     function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
       const ctx = canvasElement.getContext("2d");
-
-      //鏡頭切換
-      const video = document.getElementById("video");
       const switchBtn = document.getElementById("switchCam");
+
       let currentStream;
       let useFront = true; // 預設前鏡頭
 
