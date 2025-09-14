@@ -41,14 +41,13 @@
     }
 
     #switchCam {
-      position: absolute;
-      top: 10px;
+     position: absolute;
+      bottom: 10px;  
       right: 10px;
-      font-size: 40px;   /* 圖示大小 */
-      color: white;      /* 顏色 */
+      font-size: 20px;
       cursor: pointer;
       opacity: 0.8;
-      z-index: 10;
+      z-index: 20; /* 高於 canvas */
       transition: transform 0.2s, opacity 0.2s;
     }
 
