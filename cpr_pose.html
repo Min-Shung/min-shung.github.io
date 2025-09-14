@@ -306,6 +306,7 @@
           );
           if (stdDepth > 15) {
             drawLine("⚠️ 壓胸深度不穩定", "yellow");
+            playVoiceAlert("deep");
           }
         } else {
           drawLine("⚠️ 無法判斷壓胸深度（動作過少）", "yellow");
@@ -358,7 +359,8 @@
 
             if (frequency < 100 || frequency > 120) {
               drawLine("⚠️ 壓胸頻率不正確 (建議 100~120)", "yellow");
-              playVoiceAlert("hands");
+              if(frequency < 100) playVoiceAlert("slow");
+              if(frequency > 120) playVoiceAlert("quick");
             }
           }
         } else {
@@ -380,7 +382,10 @@
     const sounds = {
       elbow: new Audio("radio/elbow.mp3"),
       hands: new Audio("radio/hands.mp3"),
-      wrist: new Audio("radio/wrist.mp3")
+      wrist: new Audio("radio/wrist.mp3"),
+      slow: new Audio("radio/slow.mp3"),
+      quick: new Audio("radio/quick.mp3"),
+      deep: new Audio("radio/deep.mp3")
     };
 
     // 切換聲音開關
