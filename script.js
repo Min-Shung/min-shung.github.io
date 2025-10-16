@@ -278,9 +278,14 @@ setupPose(video, canvas, pose, "pressPath", "pressTimestamps", "pressStartTime")
 
 let currentFacingMode = "user";
 let camera;
+let currentQuality = "low";
 
 async function startCamera(facingMode) {
   if (camera) await camera.stop();
+  const resolution = currentQuality === "low"
+    ? { width: 320, height: 240 }
+    : { width: 640, height: 480 };
+    
   camera = new Camera(video, {
     onFrame: async () => await pose.send({ image: video }),
     width: 640,
