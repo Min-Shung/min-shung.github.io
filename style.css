@@ -1,0 +1,74 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: black;
+  overflow: hidden;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.panel {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.switch-camera-btn {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  padding: 10px;
+  cursor: pointer;
+  color: white;
+  font-size: 24px;
+}
+.switch-camera-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.voice-btn {
+  position: absolute;
+  bottom: 65px;
+  left: 15px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  padding: 10px;
+  cursor: pointer;
+  color: white;
+  font-size: 24px;
+}
+.voice-btn i.muted {
+  color: gray;
+}
+.voice-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+video,
+canvas {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (orientation: landscape) {
+  .container {
+    flex-direction: row;
+  }
+}
