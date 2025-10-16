@@ -210,6 +210,7 @@ function onResults(results) {
   // === 靜止偵測：如果幾乎沒動，就不進行壓胸判定 ===
   const yRange = Math.max(...yValues) - Math.min(...yValues);
   if (yRange < 15) {
+    drawLine("⚠️無明顯壓胸動作", "gray");
     return;
   }
 
