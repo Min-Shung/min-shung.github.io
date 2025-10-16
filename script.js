@@ -362,6 +362,7 @@ const demoVideo = document.getElementById("demoVideo");
 const demoCanvas = document.getElementById("demoCanvas");
 
 async function initDemoVideo() {
+  // 初始化 MediaPipe
   const pose2 = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
   });
@@ -373,25 +374,29 @@ async function initDemoVideo() {
     minTrackingConfidence: 0.7,
   });
 
-  setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
-
   // 嘗試從 IndexedDB 載入影片
   const loaded = await loadDemoVideo(demoVideo);
   if (!loaded) {
-    // 如果沒有快取，就用原始影片並快取起來
-    demoVideo.src = "CPR_demonstration.mov";  // 你的示範影片來源
+    demoVideo.src = "CPR_demonstration.mov"; // 原始影片
     demoVideo.onloadeddata = () => cacheDemoVideo(demoVideo);
   }
 
-  demoVideo.playbackRate = 0.82;
+  // 等影片可以播放後再 setup Pose
+  demoVideo.onloadeddata = () => {
+    setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
+    demoVideo.playbackRate = 0.82;
+    demoVideo.play(); // 確保播放
+    loopDetection();
+  };
 
-  demoVideo.onplay = function loopDetection() {
+  function loopDetection() {
     requestAnimationFrame(async () => {
       await pose2.send({ image: demoVideo });
       loopDetection();
     });
-  };
+  }
 }
+
 
 initDemoVideo();
 
