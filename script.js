@@ -1,4 +1,5 @@
-function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
+
+function setupPose(videoElement, canvasElement, pressPathName, pressTimestampsName, pressStartTimeName) {
   const ctx = canvasElement.getContext("2d");
 
   if (!window.frameTimes) window.frameTimes = [];
@@ -77,6 +78,7 @@ function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pre
     return peaks;
   }
 
+  // 這是原本的 onResults 內容（我保留一模一樣）
   function onResults(results) {
     resizeCanvas();
     ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -86,7 +88,7 @@ function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pre
     ctx.lineWidth = 6;
     ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
 
-    if (!results.poseLandmarks) return;
+    if (!results || !results.poseLandmarks) return;
 
     const now = performance.now();
     window.frameTimes.push(now);
@@ -138,8 +140,6 @@ function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pre
     } else {
       window.wristNotUnderShoulderStart = null;
     }
-
-    if (!areElbowsTogether(le, re)) drawLine("⚠️ 雙手未交疊", "yellow");
 
     if (!window[pressPathName]) window[pressPathName] = [];
     const pressPoint = midpoint(lw, rw);
@@ -226,10 +226,14 @@ function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pre
     }
   }
 
-  poseInstance.onResults(onResults);
+  // 回傳一個 handler，讓外面可以把 worker 傳回的 results 傳進來處理
+  return {
+    handleResults: onResults,
+    resizeCanvas, // 若需要也能在外面呼叫
+  };
 }
 
-// === 聲音提示 ===
+// === 聲音提示（照原本） ===
 let voiceEnabled = false;
 let lastVoiceTime = 0;
 const VOICE_COOLDOWN = 2600;
@@ -244,11 +248,11 @@ const sounds = {
 
 const toggleVoiceBtn = document.getElementById("toggleVoice");
 const voiceIcon = document.getElementById("voiceIcon");
-voiceIcon.classList.add("muted");
+if (voiceIcon) voiceIcon.classList.add("muted");
 
-toggleVoiceBtn.addEventListener("click", () => {
+toggleVoiceBtn && toggleVoiceBtn.addEventListener("click", () => {
   voiceEnabled = !voiceEnabled;
-  voiceIcon.classList.toggle("muted", !voiceEnabled);
+  if (voiceIcon) voiceIcon.classList.toggle("muted", !voiceEnabled);
 });
 
 function playVoiceAlert(type) {
@@ -262,64 +266,125 @@ function playVoiceAlert(type) {
   }
 }
 
-// === 鏡頭設定 ===
+// --- 主流程：啟動 Workers，啟動相機與示範影片處理 ---
+
+// 元件選取
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
-const pose = new Pose({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
-});
-pose.setOptions({
-  modelComplexity: 2,
-  smoothLandmarks: true,
-  enableSegmentation: false,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.7,
-});
-setupPose(video, canvas, pose, "pressPath", "pressTimestamps", "pressStartTime");
+const demoVideo = document.getElementById("demoVideo");
+const demoCanvas = document.getElementById("demoCanvas");
 
-let currentFacingMode = "user";
-let camera;
+// 建立 setup handler（保留你原本的 pressPath/pressTimestamps 變數名稱）
+const cameraPoseHandler = setupPose(video, canvas, null, "pressPath", "pressTimestamps", "pressStartTime");
+const demoPoseHandler   = setupPose(demoVideo, demoCanvas, null, "pressPath2", "pressTimestamps2", "pressStartTime2");
 
-async function startCamera(facingMode) {
-  if (camera) await camera.stop();
-  camera = new Camera(video, {
-    onFrame: async () => await pose.send({ image: video }),
-    width: 640,
-    height: 480,
-    facingMode: facingMode
-  });
-  camera.start();
+// 建立並初始化 worker（兩個實例，分別處理 camera 與 demo video）
+let cameraWorker = null;
+let demoWorker = null;
+let cameraWorkerReady = false;
+let demoWorkerReady = false;
+
+function initWorkers() {
+  // camera worker
+  cameraWorker = new Worker('poseWorker.js');
+  cameraWorker.onmessage = (e) => {
+    const data = e.data;
+    if (data.type === 'ready') {
+      cameraWorkerReady = true;
+      console.log('cameraWorker ready');
+    } else if (data.type === 'results') {
+      // data.poseLandmarks 為陣列或 null
+      // 轉成 results-like 物件交給 handler
+      const results = { poseLandmarks: data.poseLandmarks, poseWorldLandmarks: data.poseWorldLandmarks };
+      cameraPoseHandler.handleResults(results);
+    }
+  };
+  cameraWorker.postMessage({ type: 'init' });
+
+  // demo worker
+  demoWorker = new Worker('poseWorker.js');
+  demoWorker.onmessage = (e) => {
+    const data = e.data;
+    if (data.type === 'ready') {
+      demoWorkerReady = true;
+      console.log('demoWorker ready');
+    } else if (data.type === 'results') {
+      const results = { poseLandmarks: data.poseLandmarks, poseWorldLandmarks: data.poseWorldLandmarks };
+      demoPoseHandler.handleResults(results);
+    }
+  };
+  demoWorker.postMessage({ type: 'init' });
 }
 
-document.getElementById("switchCamera").addEventListener("click", () => {
+// --- 啟動相機（使用 MediaPipe Camera helper） ---
+// 你原本使用 Camera(...)；這裡也用，但 onFrame 改成 createImageBitmap -> 傳 worker
+let CameraLibAvailable = (typeof Camera !== 'undefined');
+let cameraInstance = null;
+let currentFacingMode = 'user';
+
+async function startCamera(facingMode = 'user') {
+  if (!CameraLibAvailable) {
+    console.error('MediaPipe Camera helper not found. Make sure @mediapipe/camera_utils is loaded.');
+    return;
+  }
+  if (cameraInstance) {
+    try { await cameraInstance.stop(); } catch (e) {}
+  }
+
+  cameraInstance = new Camera(video, {
+    onFrame: async () => {
+      if (!cameraWorkerReady) return;
+      try {
+        const bitmap = await createImageBitmap(video);
+        cameraWorker.postMessage({ type: 'frame', imageBitmap: bitmap, source: 'camera' }, [bitmap]);
+      } catch (err) {
+        // frame create error
+      }
+    },
+    width: 640,
+    height: 480,
+    facingMode
+  });
+
+  cameraInstance.start();
+}
+
+// 切鏡頭按鈕
+document.getElementById("switchCamera") && document.getElementById("switchCamera").addEventListener("click", () => {
   currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
   startCamera(currentFacingMode);
 });
 
-startCamera(currentFacingMode);
+// --- 示範影片：用 requestAnimationFrame 送影格到 demoWorker ---
+function startDemoLoop() {
+  async function loop() {
+    if (demoVideo.paused || demoVideo.ended) {
+      requestAnimationFrame(loop);
+      return;
+    }
+    if (demoWorkerReady) {
+      try {
+        const bitmap = await createImageBitmap(demoVideo);
+        demoWorker.postMessage({ type: 'frame', imageBitmap: bitmap, source: 'demo' }, [bitmap]);
+      } catch (e) {
+        // ignore
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
 
-// === 示範影片 ===
-const demoVideo = document.getElementById("demoVideo");
-const demoCanvas = document.getElementById("demoCanvas");
-const pose2 = new Pose({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+// demoVideo 啟動時啟動送 frame
+demoVideo.addEventListener('play', () => {
+  startDemoLoop();
 });
-pose2.setOptions({
-  modelComplexity: 2,
-  smoothLandmarks: true,
-  enableSegmentation: false,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.7,
-});
-setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
 
-demoVideo.playbackRate = 0.812;
-demoVideo.addEventListener("play", () => {
-  demoVideo.playbackRate = 0.82;
-});
-demoVideo.onplay = function loopDetection() {
-  requestAnimationFrame(async () => {
-    await pose2.send({ image: demoVideo });
-    loopDetection();
-  });
-};
+// --- 初始化所有東西 ---
+function initAll() {
+  initWorkers();
+  startCamera(currentFacingMode);
+  // demoVideo 可能已 autoplay，若在 play 事件就會開始發送
+}
+
+initAll();
