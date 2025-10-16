@@ -373,7 +373,7 @@ async function initDemoVideo() {
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.7,
   });
-
+    await pose2.initialize();
   // 嘗試從 IndexedDB 載入影片
   const loaded = await loadDemoVideo(demoVideo);
   if (!loaded) demoVideo.src = "CPR_demonstration.mov";
