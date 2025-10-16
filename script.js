@@ -362,11 +362,10 @@ const demoVideo = document.getElementById("demoVideo");
 const demoCanvas = document.getElementById("demoCanvas");
 
 async function initDemoVideo() {
-  // 初始化 MediaPipe Pose
+  // 初始化 MediaPipe
   const pose2 = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
   });
-
   pose2.setOptions({
     modelComplexity: 2,
     smoothLandmarks: true,
@@ -374,50 +373,13 @@ async function initDemoVideo() {
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.7,
   });
-
-  // 這裡不使用 pose2.initialize()，因為部分版本不會真正等待 WASM 載入完成
-  // 改用一個「安全載入測試」
-  let poseReady = false;
-  try {
-    const testCanvas = document.createElement("canvas");
-    testCanvas.width = 2;
-    testCanvas.height = 2;
-    const ctx = testCanvas.getContext("2d");
-    ctx.fillRect(0, 0, 2, 2);
-    await pose2.send({ image: testCanvas });
-    poseReady = true;
-  } catch (err) {
-    console.warn("Pose 模型尚未完全載入，將稍後重試...");
-  }
-
-  // 若第一次失敗，延遲再試幾次（最多 3 次）
-  let retries = 0;
-  while (!poseReady && retries < 3) {
-    await new Promise((r) => setTimeout(r, 1000));
-    try {
-      const testCanvas = document.createElement("canvas");
-      testCanvas.width = 2;
-      testCanvas.height = 2;
-      const ctx = testCanvas.getContext("2d");
-      ctx.fillRect(0, 0, 2, 2);
-      await pose2.send({ image: testCanvas });
-      poseReady = true;
-    } catch (err) {
-      retries++;
-      console.warn(`Pose 載入重試中 (${retries})...`);
-    }
-  }
-
-  if (!poseReady) {
-    alert("Pose 模型載入失敗，請重新整理頁面。");
-    return;
-  }
-
-  // === 影片載入邏輯 ===
+    await pose2.initialize();
+  // 嘗試從 IndexedDB 載入影片
   const loaded = await loadDemoVideo(demoVideo);
   if (!loaded) demoVideo.src = "CPR_demonstration.mov";
 
-  demoVideo.onloadeddata = async () => {
+   demoVideo.onloadeddata = async () => {
+    // 如果影片不是快取版本，順便 cache
     if (!loaded) await cacheDemoVideo(demoVideo);
 
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
@@ -426,11 +388,7 @@ async function initDemoVideo() {
 
     async function loopDetection() {
       if (!demoVideo.paused && !demoVideo.ended) {
-        try {
-          await pose2.send({ image: demoVideo });
-        } catch (err) {
-          console.warn("Pose send() 失敗，忽略此幀：", err);
-        }
+        await pose2.send({ image: demoVideo });
         requestAnimationFrame(loopDetection);
       }
     }
@@ -438,7 +396,6 @@ async function initDemoVideo() {
     loopDetection();
   };
 }
-
 
 
 initDemoVideo();
