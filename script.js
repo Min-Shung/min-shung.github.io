@@ -379,7 +379,7 @@ async function initDemoVideo() {
   const loaded = await loadDemoVideo(demoVideo);
   if (!loaded) {
     // 如果沒有快取，就用原始影片並快取起來
-    demoVideo.src = "demo_low.mp4";  // 你的示範影片來源
+    demoVideo.src = "CPR_demonstration.mov";  // 你的示範影片來源
     demoVideo.onloadeddata = () => cacheDemoVideo(demoVideo);
   }
 
