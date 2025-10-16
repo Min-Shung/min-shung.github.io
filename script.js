@@ -376,25 +376,25 @@ async function initDemoVideo() {
 
   // 嘗試從 IndexedDB 載入影片
   const loaded = await loadDemoVideo(demoVideo);
-  if (!loaded) {
-    demoVideo.src = "CPR_demonstration.mov"; // 原始影片
-    demoVideo.onloadeddata = () => cacheDemoVideo(demoVideo);
-  }
+  if (!loaded) demoVideo.src = "CPR_demonstration.mov";
 
-  // 等影片可以播放後再 setup Pose
-  demoVideo.onloadeddata = () => {
+   demoVideo.onloadeddata = async () => {
+    // 如果影片不是快取版本，順便 cache
+    if (!loaded) await cacheDemoVideo(demoVideo);
+
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
     demoVideo.playbackRate = 0.82;
-    demoVideo.play(); // 確保播放
+    demoVideo.play();
+
+    async function loopDetection() {
+      if (!demoVideo.paused && !demoVideo.ended) {
+        await pose2.send({ image: demoVideo });
+        requestAnimationFrame(loopDetection);
+      }
+    }
+
     loopDetection();
   };
-
-  function loopDetection() {
-    requestAnimationFrame(async () => {
-      await pose2.send({ image: demoVideo });
-      loopDetection();
-    });
-  }
 }
 
 
