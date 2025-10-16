@@ -1,3 +1,58 @@
+// === IndexedDB 初始化 ===
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("videoDB", 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains("videos")) {
+        db.createObjectStore("videos");
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+async function saveVideoToDB(key, blob) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("videos", "readwrite");
+    tx.objectStore("videos").put(blob, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e);
+  });
+}
+
+async function loadVideoFromDB(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("videos", "readonly");
+    const request = tx.objectStore("videos").get(key);
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+// === 影片快取工具 ===
+async function cacheDemoVideo(videoElement, key = "demoVideo") {
+  const response = await fetch(videoElement.src);
+  const blob = await response.blob();
+  await saveVideoToDB(key, blob);
+  console.log("影片已存入 IndexedDB");
+}
+
+async function loadDemoVideo(videoElement, key = "demoVideo") {
+  const blob = await loadVideoFromDB(key);
+  if (blob) {
+    const url = URL.createObjectURL(blob);
+    videoElement.src = url;
+    videoElement.load();
+    console.log("影片從 IndexedDB 載入");
+    return true;
+  }
+  return false;
+}
+
 function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
   const ctx = canvasElement.getContext("2d");
 
@@ -285,7 +340,7 @@ async function startCamera(facingMode) {
   const resolution = currentQuality === "low"
     ? { width: 320, height: 240 }
     : { width: 640, height: 480 };
-    
+
   camera = new Camera(video, {
     onFrame: async () => await pose.send({ image: video }),
     width: 640,
@@ -305,25 +360,38 @@ startCamera(currentFacingMode);
 // === 示範影片 ===
 const demoVideo = document.getElementById("demoVideo");
 const demoCanvas = document.getElementById("demoCanvas");
-const pose2 = new Pose({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
-});
-pose2.setOptions({
-  modelComplexity: 2,
-  smoothLandmarks: true,
-  enableSegmentation: false,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.7,
-});
-setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
 
-demoVideo.playbackRate = 0.812;
-demoVideo.addEventListener("play", () => {
-  demoVideo.playbackRate = 0.82;
-});
-demoVideo.onplay = function loopDetection() {
-  requestAnimationFrame(async () => {
-    await pose2.send({ image: demoVideo });
-    loopDetection();
+async function initDemoVideo() {
+  const pose2 = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
   });
-};
+  pose2.setOptions({
+    modelComplexity: 2,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.7,
+  });
+
+  setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
+
+  // 嘗試從 IndexedDB 載入影片
+  const loaded = await loadDemoVideo(demoVideo);
+  if (!loaded) {
+    // 如果沒有快取，就用原始影片並快取起來
+    demoVideo.src = "demo_low.mp4";  // 你的示範影片來源
+    demoVideo.onloadeddata = () => cacheDemoVideo(demoVideo);
+  }
+
+  demoVideo.playbackRate = 0.82;
+
+  demoVideo.onplay = function loopDetection() {
+    requestAnimationFrame(async () => {
+      await pose2.send({ image: demoVideo });
+      loopDetection();
+    });
+  };
+}
+
+initDemoVideo();
+
