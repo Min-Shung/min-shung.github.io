@@ -275,16 +275,31 @@ if (shoulderRange < smallMotionThreshold) {
 
     if (now - window[pressStartTimeName] < 5000) {
       drawLine("壓胸頻率: 計算中...", "white");
-    } else if (window[pressTimestampsName].length >= 5) {
+    }else if (window[pressTimestampsName].length >= 5) {
+  const currentTime = performance.now();
+
+  // === 每秒更新頻率 ===
+  if (!window.lastFreqUpdate) window.lastFreqUpdate = 0;
+  if (currentTime - window.lastFreqUpdate >= 1000) {
+    window.lastFreqUpdate = currentTime;
+
+    // 只保留最近 5 秒內的壓胸時間戳
+    window[pressTimestampsName] = window[pressTimestampsName].filter(
+      (t) => currentTime - t <= 5000
+    );
+
+    // 若過去 5 秒內至少有 2 次壓胸，就可以計算頻率
+    if (window[pressTimestampsName].length >= 2) {
       const intervals = [];
       for (let i = 1; i < window[pressTimestampsName].length; i++) {
         intervals.push(window[pressTimestampsName][i] - window[pressTimestampsName][i - 1]);
       }
+
       const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const frequency = 60000 / avgInterval;
 
       drawLine(
-        `壓胸頻率: ${frequency.toFixed(1)} 下/分`,
+        `壓胸頻率(近5秒): ${frequency.toFixed(1)} 下/分`,
         frequency >= 100 && frequency <= 120 ? "lime" : "yellow"
       );
 
@@ -293,7 +308,12 @@ if (shoulderRange < smallMotionThreshold) {
         if (frequency < 100) playVoiceAlert("slow");
         if (frequency > 120) playVoiceAlert("quick");
       }
+    } else {
+      drawLine("壓胸頻率: 計算中...", "white");
     }
+  }
+}
+
   } else {
     window[pressTimestampsName] = [];
     window[pressStartTimeName] = null;
