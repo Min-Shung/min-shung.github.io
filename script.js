@@ -52,8 +52,8 @@ async function loadDemoVideo(videoElement, key = "demoVideo") {
   }
   return false;
 }
-let compressionActive = false;
-let compressionTimer = null;
+let lastFrequency = null;
+let lastFrequencyTime = 0;
 
 function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
   const ctx = canvasElement.getContext("2d");
@@ -302,7 +302,8 @@ if (shoulderRange < smallMotionThreshold) {
 
       const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const frequency = 60000 / avgInterval;
-
+      lastFrequency = frequency;
+      lastFrequencyTime = Date.now();
       drawLine(
         `壓胸頻率(近5秒): ${frequency.toFixed(1)} 下/分`,
         frequency >= 100 && frequency <= 120 ? "lime" : "yellow"
@@ -326,6 +327,9 @@ if (shoulderRange < smallMotionThreshold) {
   }
 }
 
+if (lastFrequency && Date.now() - lastFrequencyTime < 1000) {
+  drawLine(`壓胸頻率：${lastFrequency.toFixed(1)} 次/分鐘`, "green");
+}
 
   poseInstance.onResults(onResults);
 }
