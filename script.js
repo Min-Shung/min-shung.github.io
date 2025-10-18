@@ -324,9 +324,15 @@ if (shoulderRange < smallMotionThreshold) {
   }
 }
 
-if (lastFrequency && Date.now() - lastFrequencyTime < 1000) {
-  drawLine(`壓胸頻率：${lastFrequency.toFixed(1)} 次/分鐘`, "green");
+if (lastFrequency && Date.now() - lastFrequencyTime < 5000) {
+  const color = lastFrequency >= 100 && lastFrequency <= 120 ? "lime" : "yellow";
+  drawLine(`壓胸頻率：${lastFrequency.toFixed(1)} 次/分鐘`, color);
+
+  if (lastFrequency < 100 || lastFrequency > 120) {
+    drawLine("⚠️ 壓胸頻率不正確 (建議 100~120)", "yellow");
+  }
 }
+
 
   poseInstance.onResults(onResults);
 }
