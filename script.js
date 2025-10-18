@@ -140,7 +140,6 @@ async function setupPose(videoElement, canvasElement, poseInstance, pressPathNam
   }
 
 function onResults(results) {
-  resizeCanvas();
   ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
   const { boxX, boxY, boxWidth, boxHeight } = getBoxDimensions();
