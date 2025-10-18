@@ -205,7 +205,9 @@ function onResults(results) {
 
   // 強化平滑化（k=11）
   const smoothedPath = smoothPath(window[pressPathName], 11);
- // === 靜止偵測（改用肩膀起伏判斷是否有在按壓） ===
+  const yValues = smoothedPath.map((p) => p.y);
+
+// === 靜止偵測（肩膀起伏判斷是否有在按壓） ===
 const lsY = lm[11].y * canvasElement.height;
 const rsY = lm[12].y * canvasElement.height;
 const avgShoulderY = (lsY + rsY) / 2;
@@ -218,10 +220,9 @@ const shoulderRange = Math.max(...window.shoulderHistory) - Math.min(...window.s
 const smallMotionThreshold = Math.max(3, boxHeight * 0.01);
 
 if (shoulderRange < smallMotionThreshold) {
-  drawLine("⚠️ 未偵測到壓胸動作", "gray");
+  drawLine("⚠️未偵測到壓胸動作", "gray");
   return;
 }
-
 
 
   const extrema = findExtrema(yValues);
