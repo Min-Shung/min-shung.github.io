@@ -246,8 +246,6 @@ if (shoulderRange < smallMotionThreshold) {
       drawLine("⚠️ 壓胸深度不穩定", "yellow");
       playVoiceAlert("deep");
     }
-  } else {
-    drawLine("⚠️ 無法判斷壓胸深度（動作過少）", "yellow");
   }
 
   // === 雙手交疊與壓胸頻率 ===
