@@ -430,7 +430,7 @@ async function initDemoVideo() {
     await pose2.initialize();
   // 嘗試從 IndexedDB 載入影片
   const loaded = await loadDemoVideo(demoVideo);
-  if (!loaded) demoVideo.src = "CPR_demonstration.mov";
+  if (!loaded) demoVideo.src = "CPR_demonstration.Mp4";
 
    demoVideo.onloadeddata = async () => {
     // 如果影片不是快取版本，順便 cache
