@@ -434,17 +434,20 @@ async function initDemoVideo() {
     demoVideo.playbackRate = 0.82;
     demoVideo.play();
     demoVideo.addEventListener("timeupdate", () => {
-    if (demoVideo.duration - demoVideo.currentTime < 0.05) { // 最後 0.05 秒
-        demoVideo.currentTime = 0;  // 直接跳回開頭
-        demoVideo.play();           // 立刻播放
+    if (demoVideo.duration && demoVideo.currentTime >= demoVideo.duration - 0.08) {
+        demoVideo.pause();
+        demoVideo.currentTime = 0;
+        demoVideo.play();
     }
     });
+
     async function loopDetection() {
-      if (!demoVideo.paused && !demoVideo.ended) {
+    if (!demoVideo.paused && !demoVideo.ended) {
         await pose2.send({ image: demoVideo });
-        requestAnimationFrame(loopDetection);
-      }
     }
+    requestAnimationFrame(loopDetection); // 💡 無論 pause 都保持循環
+    }
+
 
     loopDetection();
   };
