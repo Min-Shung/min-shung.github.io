@@ -279,7 +279,7 @@ if (shoulderRange < smallMotionThreshold) {
       drawLine("壓胸頻率: 計算中...", "white");
     }else if (window[pressTimestampsName].length >= 5) {
   const currentTime = performance.now();
-  
+
   // === 每秒更新頻率 ===
   if (!window.lastFreqUpdate) window.lastFreqUpdate = 0;
   if (currentTime - window.lastFreqUpdate >= 1000) {
@@ -433,7 +433,12 @@ async function initDemoVideo() {
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
     demoVideo.playbackRate = 0.82;
     demoVideo.play();
-
+    demoVideo.addEventListener("timeupdate", () => {
+    if (demoVideo.duration - demoVideo.currentTime < 0.05) { // 最後 0.05 秒
+        demoVideo.currentTime = 0;  // 直接跳回開頭
+        demoVideo.play();           // 立刻播放
+    }
+    });
     async function loopDetection() {
       if (!demoVideo.paused && !demoVideo.ended) {
         await pose2.send({ image: demoVideo });
