@@ -437,7 +437,10 @@ async function initDemoVideo() {
     if (!loaded) await cacheDemoVideo(demoVideo);
 
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
-    //demoVideo.playbackRate = 0.82;
+    demoVideo.playbackRate = 0.9;
+    window.pressTimestamps2 = [];
+    window.pressStartTime2 = null;
+    window.pressPath2 = [];
     demoVideo.play();
     demoVideo.addEventListener("timeupdate", () => {
     if (demoVideo.duration && demoVideo.currentTime >= demoVideo.duration - 0.08) {
