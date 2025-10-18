@@ -52,6 +52,8 @@ async function loadDemoVideo(videoElement, key = "demoVideo") {
   }
   return false;
 }
+let compressionActive = false;
+let compressionTimer = null;
 
 function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
   const ctx = canvasElement.getContext("2d");
@@ -277,7 +279,10 @@ if (shoulderRange < smallMotionThreshold) {
       drawLine("壓胸頻率: 計算中...", "white");
     }else if (window[pressTimestampsName].length >= 5) {
   const currentTime = performance.now();
-
+  clearTimeout(compressionTimer);
+  compressionTimer = setTimeout(() => {
+    compressionActive = false;
+  }, 1000);
   // === 每秒更新頻率 ===
   if (!window.lastFreqUpdate) window.lastFreqUpdate = 0;
   if (currentTime - window.lastFreqUpdate >= 1000) {
