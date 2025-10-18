@@ -53,11 +53,12 @@ async function loadDemoVideo(videoElement, key = "demoVideo") {
   return false;
 }
 
-function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
+async function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
   const ctx = canvasElement.getContext("2d");
 
   if (!window.frameTimes) window.frameTimes = [];
 
+  // === resizeCanvas ===
   function resizeCanvas() {
     if (videoElement.videoWidth && videoElement.videoHeight) {
       canvasElement.width = videoElement.videoWidth;
@@ -65,8 +66,14 @@ function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pre
     }
   }
 
-  videoElement.addEventListener("loadedmetadata", resizeCanvas);
-  window.addEventListener("resize", resizeCanvas);
+  // 綁定事件（避免重複）
+  if (!videoElement.hasResizeListener) {
+    videoElement.addEventListener("loadedmetadata", resizeCanvas);
+    window.addEventListener("resize", resizeCanvas);
+    videoElement.hasResizeListener = true;
+  }
+
+  resizeCanvas();
 
   function getBoxDimensions() {
     const boxMarginRatio = 0.2;
@@ -221,7 +228,6 @@ const smallMotionThreshold = Math.max(3, boxHeight * 0.01);
 
 if (shoulderRange < smallMotionThreshold) {
   drawLine("⚠️未偵測到壓胸動作", "gray");
-  return;
 }
 
 
@@ -351,6 +357,7 @@ pose.setOptions({
   minDetectionConfidence: 0.5,
   minTrackingConfidence: 0.7,
 });
+
 setupPose(video, canvas, pose, "pressPath", "pressTimestamps", "pressStartTime");
 
 let currentFacingMode = "user";
@@ -359,18 +366,20 @@ let currentQuality = "low";
 
 async function startCamera(facingMode) {
   if (camera) await camera.stop();
-  const resolution = currentQuality === "low"
-    ? { width: 320, height: 240 }
-    : { width: 640, height: 480 };
 
   camera = new Camera(video, {
-    onFrame: async () => await pose.send({ image: video }),
+    onFrame: async () => {
+    if (!video.paused && !video.ended) {
+      await pose.send({ image: video }); // 直接呼叫 MediaPipe
+    }
+    },
     width: 640,
     height: 480,
     facingMode: facingMode
   });
   camera.start();
 }
+
 
 document.getElementById("switchCamera").addEventListener("click", () => {
   currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
@@ -408,7 +417,7 @@ async function initDemoVideo() {
     demoVideo.playbackRate = 0.86;
     // === 無縫循環 ===
     demoVideo.addEventListener("timeupdate", () => {
-    if (demoVideo.duration && demoVideo.currentTime >= demoVideo.duration - 0.08) {
+    if (demoVideo.duration && demoVideo.currentTime >= demoVideo.duration - 0.02) {
         demoVideo.pause();
         demoVideo.currentTime = 0;
         demoVideo.play();
