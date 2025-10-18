@@ -52,8 +52,6 @@ async function loadDemoVideo(videoElement, key = "demoVideo") {
   }
   return false;
 }
-let lastFrequency = null;
-let lastFrequencyTime = 0;
 
 function setupPose(videoElement, canvasElement, poseInstance, pressPathName, pressTimestampsName, pressStartTimeName) {
   const ctx = canvasElement.getContext("2d");
@@ -277,32 +275,16 @@ if (shoulderRange < smallMotionThreshold) {
 
     if (now - window[pressStartTimeName] < 5000) {
       drawLine("壓胸頻率: 計算中...", "white");
-    }else if (window[pressTimestampsName].length >= 5) {
-  const currentTime = performance.now();
-
-  // === 每秒更新頻率 ===
-  if (!window.lastFreqUpdate) window.lastFreqUpdate = 0;
-  if (currentTime - window.lastFreqUpdate >= 1000) {
-    window.lastFreqUpdate = currentTime;
-
-    // 只保留最近 5 秒內的壓胸時間戳
-    window[pressTimestampsName] = window[pressTimestampsName].filter(
-      (t) => currentTime - t <= 5000
-    );
-
-    // 若過去 5 秒內至少有 2 次壓胸，就可以計算頻率
-    if (window[pressTimestampsName].length >= 2) {
+    } else if (window[pressTimestampsName].length >= 5) {
       const intervals = [];
       for (let i = 1; i < window[pressTimestampsName].length; i++) {
         intervals.push(window[pressTimestampsName][i] - window[pressTimestampsName][i - 1]);
       }
-
       const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const frequency = 60000 / avgInterval;
-      lastFrequency = frequency;
-      lastFrequencyTime = Date.now();
+
       drawLine(
-        `壓胸頻率(近5秒): ${frequency.toFixed(1)} 下/分`,
+        `壓胸頻率: ${frequency.toFixed(1)} 下/分`,
         frequency >= 100 && frequency <= 120 ? "lime" : "yellow"
       );
 
@@ -311,25 +293,11 @@ if (shoulderRange < smallMotionThreshold) {
         if (frequency < 100) playVoiceAlert("slow");
         if (frequency > 120) playVoiceAlert("quick");
       }
-    } else {
-      drawLine("壓胸頻率: 計算中...", "white");
     }
-  }
-}
-
   } else {
     window[pressTimestampsName] = [];
     window[pressStartTimeName] = null;
     drawLine("⚠️ 雙手未交疊，壓胸頻率清空", "yellow");
-  }
-}
-
-if (lastFrequency && Date.now() - lastFrequencyTime < 5000) {
-  const color = lastFrequency >= 100 && lastFrequency <= 120 ? "lime" : "yellow";
-  drawLine(`壓胸頻率：${lastFrequency.toFixed(1)} 次/分鐘`, color);
-
-  if (lastFrequency < 100 || lastFrequency > 120) {
-    drawLine("⚠️ 壓胸頻率不正確 (建議 100~120)", "yellow");
   }
 }
 
@@ -430,18 +398,15 @@ async function initDemoVideo() {
     await pose2.initialize();
   // 嘗試從 IndexedDB 載入影片
   const loaded = await loadDemoVideo(demoVideo);
-  if (!loaded) demoVideo.src = "CPR_demonstration.Mp4";
+  if (!loaded) demoVideo.src = "CPR_demonstration.mov";
 
    demoVideo.onloadeddata = async () => {
     // 如果影片不是快取版本，順便 cache
     if (!loaded) await cacheDemoVideo(demoVideo);
 
     setupPose(demoVideo, demoCanvas, pose2, "pressPath2", "pressTimestamps2", "pressStartTime2");
-    demoVideo.playbackRate = 0.9;
-    window.pressTimestamps2 = [];
-    window.pressStartTime2 = null;
-    window.pressPath2 = [];
-    demoVideo.play();
+    demoVideo.playbackRate = 0.82;
+    // === 無縫循環 ===
     demoVideo.addEventListener("timeupdate", () => {
     if (demoVideo.duration && demoVideo.currentTime >= demoVideo.duration - 0.08) {
         demoVideo.pause();
@@ -450,13 +415,17 @@ async function initDemoVideo() {
     }
     });
 
+    demoVideo.addEventListener("seeked", () => {
+    if (demoVideo.paused) demoVideo.play();
+    });
+
+    // === Pose 偵測循環 ===
     async function loopDetection() {
     if (!demoVideo.paused && !demoVideo.ended) {
         await pose2.send({ image: demoVideo });
     }
-    requestAnimationFrame(loopDetection); // 💡 無論 pause 都保持循環
+    requestAnimationFrame(loopDetection);
     }
-
 
     loopDetection();
   };
